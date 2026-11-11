@@ -1,0 +1,13 @@
+.gradle/
+**/build/
+local.properties
+.env
+.env.*
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+x-base.apk
+reference-x-video-catcher/
+window-x.xml
