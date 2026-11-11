@@ -1,8 +1,19 @@
 # X 视频保存
 
-LSPosed 模块，作用域仅为 `com.twitter.android`。进入视频播放页面并播放几秒后，轻点播放栏倍速右侧的“↓”按原画下载，保存到 `Movies/X视频保存/`。长按可选择本次下载画质或设置播放画质。下载时入口显示画面或声音分片的阶段进度；多个任务时显示任务数。最多同时下载两条，其余排队。下载在本机 X 进程内完成，不发送到第三方服务。
+一个用于 X（原 Twitter）Android 客户端的 LSPosed 模块，在视频播放栏提供下载入口，可将支持的视频保存到设备本地。模块的作用域仅为 `com.twitter.android`，下载在本机 X 进程内完成，不发送到第三方服务。
 
-适配目标：手机 Android 16、LSPosed 2.1.0、X 12.41.0-prod.01，以及平板 Android 13、LSPosed 1.9.2、X 12.42.0-prod.01。模块会根据播放器方法签名查找两版对应结构；X 后续更新仍可能需要重新适配。
+## 功能
+
+- 在视频播放栏倍速按钮右侧显示“↓”入口，轻点按原画下载。
+- 长按入口可选择本次下载画质，或单独设置播放画质。
+- 视频保存到 `Movies/X视频保存/`；下载时显示画面或声音分片的阶段进度。
+- 最多同时下载两条任务，其余任务排队。
+
+## 环境与使用
+
+需要 Android 设备、X 官方客户端和可用的 LSPosed 环境。自行编译并安装模块 APK，在 LSPosed 中启用模块并将作用域设为 X，重启 X 后进入视频播放页面，播放几秒即可使用下载入口。
+
+适配目标：手机 Android 16、LSPosed 2.1.0、X 12.41.0-prod.01，以及平板 Android 13、LSPosed 1.9.2、X 12.42.0-prod.01。模块会根据播放器方法签名查找两版对应结构；X 后续更新仍可能需要重新适配。其他组合的兼容性未全面验证。
 
 ## 已知限制
 
@@ -17,3 +28,7 @@ LSPosed 模块，作用域仅为 `com.twitter.android`。进入视频播放页�
 ## 编译
 
 需要 Android SDK 36、JDK 21、Gradle 9.4.1。设置 `ANDROID_JAR` 指向 SDK 中的 `platforms/android-36/android.jar`，并在 `local.properties` 设置 `sdk.dir`，运行 `gradle assembleDebug`。模块产物位于 `app/build/outputs/apk/debug/app-debug.apk`。`xposed-stubs` 仅用于编译，未打包进 APK，运行时由 LSPosed 提供接口。
+
+## 项目状态
+
+本仓库包含模块源码和构建配置。X 的播放器内部实现可能随版本变化；遇到兼容性问题时，请提供设备 Android 版本、LSPosed 版本、X 版本及可复现步骤，避免公开个人数据或访问令牌。
