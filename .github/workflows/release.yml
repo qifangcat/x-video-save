@@ -40,13 +40,13 @@ jobs:
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+          KEYSTORE_PATH: ${{ runner.temp }}/xvideosave.keystore
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_BASE64"
-          mkdir -p "$HOME/.android"
           umask 077
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
-          actual="$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          actual="$(keytool -exportcert -keystore "$KEYSTORE_PATH" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
           test "$actual" = '4adf2ac822f462cdcb16db98825011b4eeb923285d6f8324ba611299f016455f'
       - name: Install Android SDK packages
         shell: bash
@@ -55,6 +55,8 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0' </dev/null
       - name: Build debug APK
         shell: bash
+        env:
+          XVIDEOSAVE_SIGNING_KEYSTORE: ${{ runner.temp }}/xvideosave.keystore
         run: |
           set -euo pipefail
           export ANDROID_JAR="$ANDROID_HOME/platforms/android-36/android.jar"
@@ -72,6 +74,7 @@ jobs:
           grep -F "package: name='dev.local.xvideosave'" build/apk-badging.txt
           grep -F "versionName='${GITHUB_REF_NAME#v}'" build/apk-badging.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk" > build/apk-signature.txt
+          cat build/apk-signature.txt
           grep -Fi 'Signer #1 certificate SHA-256 digest: 4adf2ac822f462cdcb16db98825011b4eeb923285d6f8324ba611299f016455f' build/apk-signature.txt
           sha256sum "$apk" > SHA256SUMS.txt
           gh release create "$GITHUB_REF_NAME" "$apk" SHA256SUMS.txt --title "X 视频保存 $GITHUB_REF_NAME" --notes-file "release-notes/$GITHUB_REF_NAME.md" --verify-tag
