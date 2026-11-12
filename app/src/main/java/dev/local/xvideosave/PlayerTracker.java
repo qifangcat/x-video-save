@@ -50,5 +50,16 @@ final class PlayerTracker {
  }
  static Current current(Activity activity){Object p=currentPlayer(activity);return p==null?null:get(p);}
  static String currentResolution(Activity activity){try{Object p=currentPlayer(activity);if(p==null)return null;Object format=p.getClass().getMethod("X0").invoke(p);if(format==null)return null;Field w=format.getClass().getDeclaredField("w"),h=format.getClass().getDeclaredField("x");w.setAccessible(true);h.setAccessible(true);int width=w.getInt(format),height=h.getInt(format);return width>0&&height>0?width+"×"+height:null;}catch(Throwable ignored){return null;}}
+ static final class Bitrates {final int average,peak;Bitrates(int a,int p){average=a;peak=p;}}
+ static Bitrates currentBitrates(Activity activity){try{
+  Object player=currentPlayer(activity);if(player==null)return null;
+  Object format=player.getClass().getMethod("X0").invoke(player);if(format==null)return null;
+  Class<?> c=format.getClass();Field avg=c.getDeclaredField("i"),peak=c.getDeclaredField("j"),combined=c.getDeclaredField("k");
+  if(avg.getType()!=int.class||peak.getType()!=int.class||combined.getType()!=int.class)return null;
+  avg.setAccessible(true);peak.setAccessible(true);combined.setAccessible(true);
+  int a=avg.getInt(format),p=peak.getInt(format),v=combined.getInt(format);
+  if(v!=(p!=-1?p:a))return null;
+  return new Bitrates(a,p);
+ }catch(Throwable ignored){return null;}}
  static List<Object> snapshot(){ArrayList<Object> out=new ArrayList<>();synchronized(players){Iterator<WeakReference<Object>> it=players.iterator();while(it.hasNext()){Object p=it.next().get();if(p==null)it.remove();else out.add(p);}}return out;}
 }

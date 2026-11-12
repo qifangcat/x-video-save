@@ -27,11 +27,12 @@ final class QualitySelector {
         int shortSide(){return Math.min(width,height);}
     }
     static final class Available {
-        final List<String> resolutions; final boolean incomplete;
-        Available(List<String> resolutions, boolean incomplete) { this.resolutions=resolutions; this.incomplete=incomplete; }
+        final List<String> resolutions; final boolean incomplete; final long maxPeak, maxAverage; final boolean incompletePeak;
+        Available(List<String> resolutions, boolean incomplete, long maxPeak, long maxAverage, boolean incompletePeak) { this.resolutions=resolutions; this.incomplete=incomplete; this.maxPeak=maxPeak; this.maxAverage=maxAverage; this.incompletePeak=incompletePeak; }
     }
+    private static long number(String value) { try {return Math.max(0,Long.parseLong(value));}catch(Exception ignored){return 0;} }
     static Available available(String playlist) throws IOException {
-        List<int[]> dimensions=new ArrayList<>(); Map<String,String> pending=null; boolean unknown=false; int variants=0;
+        List<int[]> dimensions=new ArrayList<>(); Map<String,String> pending=null; boolean unknown=false, unknownPeak=false; int variants=0; long maxPeak=0,maxAverage=0;
         for(String raw:playlist.split("\\r?\\n")) {
             String line=raw.trim();
             if(line.startsWith("#EXT-X-STREAM-INF:")) {
@@ -39,6 +40,9 @@ final class QualitySelector {
                 pending=attrs(line.substring(18));
             } else if(pending!=null && !line.isEmpty() && !line.startsWith("#")) {
                 variants++; int w=0,h=0;
+                long peak=number(pending.get("BANDWIDTH")),average=number(pending.get("AVERAGE-BANDWIDTH"));
+                if(peak==0)unknownPeak=true; else maxPeak=Math.max(maxPeak,peak);
+                maxAverage=Math.max(maxAverage,average);
                 try { String[] wh=pending.getOrDefault("RESOLUTION","").split("x"); w=Integer.parseInt(wh[0]); h=Integer.parseInt(wh[1]); } catch(Exception ignored) {}
                 if(w<=0 || h<=0) unknown=true;
                 else { boolean seen=false; for(int[] d:dimensions) if(d[0]==w&&d[1]==h) seen=true; if(!seen) dimensions.add(new int[]{w,h}); }
@@ -48,7 +52,7 @@ final class QualitySelector {
         if(variants==0 || pending!=null) throw new IOException("没有可识别的主播放列表");
         dimensions.sort((a,b)->Long.compare((long)b[0]*b[1],(long)a[0]*a[1]));
         List<String> result=new ArrayList<>(); for(int[] d:dimensions) result.add(d[0]+"×"+d[1]);
-        return new Available(result,unknown);
+        return new Available(result,unknown,maxPeak,maxAverage,unknownPeak);
     }
     static Selection select(String playlist, Quality quality) throws IOException {
         Map<String,String> audio=new HashMap<>(); List<Variant> variants=new ArrayList<>(); Map<String,String> pending=null;

@@ -23,6 +23,11 @@ public final class QualitySelectorTest {
         check(rejected,"unknown dimensions reject capped quality");
         QualitySelector.Available listed=QualitySelector.available(source);
         check(!listed.incomplete && listed.resolutions.get(0).equals("720×1280"),"listed highest resolution");
+        check(listed.maxPeak==2000000 && !listed.incompletePeak,"highest advertised peak");
+        QualitySelector.Available rates=QualitySelector.available("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,AVERAGE-BANDWIDTH=2000000,RESOLUTION=1920x1080\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,AVERAGE-BANDWIDTH=700000,RESOLUTION=1280x720\nb.m3u8\n");
+        check(rates.maxPeak==3000000 && rates.maxAverage==2000000,"peak and average kept separate");
+        check(QualitySelector.available(unknown).incompletePeak==false,"bandwidth values available despite missing dimensions");
+        check(QualitySelector.available("#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1920x1080\na.m3u8\n").incompletePeak,"missing bandwidth is unknown");
         check(listed.resolutions.contains("480×852"),"listed lower resolution");
         check(QualitySelector.available(unknown).incomplete,"unknown dimensions are reported");
         QualitySelector.Available mixed=QualitySelector.available(highOnly+"#EXT-X-STREAM-INF:BANDWIDTH=300\nunknown.m3u8\n");

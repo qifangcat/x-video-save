@@ -13,7 +13,7 @@ import de.robv.android.xposed.*;
 
 /** X 12.41's Media3 track-selection parameters. Auto preserves the host's own policy. */
 final class PlaybackQuality {
-    private static final String[] LABELS={"跟随 X 自动","原画（优先最高）","高清（约 720p）","标清（约 480p）"};
+    private static final String[] LABELS={"跟随 X 自动","锁定最高（设备支持的最高码率）","高清（约 720p）","标清（约 480p）"};
     private static final Map<Object,Object> baseline=Collections.synchronizedMap(new WeakHashMap<>());
     private static final ThreadLocal<Boolean> internal=new ThreadLocal<>();
     private static volatile int mode;
@@ -69,16 +69,31 @@ final class PlaybackQuality {
             XposedBridge.log("XVideoSave: playback quality applied mode="+mode);
         }catch(Throwable e){XposedBridge.log("XVideoSave: playback quality apply failed: "+e.getClass().getSimpleName());}
     }
+    private static String rate(long value){return value>0?String.format(java.util.Locale.ROOT,"%.2f Mbps",value/1000000.0):"未知";}
+    private static String playing(Activity a) {
+        PlayerTracker.Bitrates rates=PlayerTracker.currentBitrates(a);
+        return "当前播放："+Objects.toString(PlayerTracker.currentResolution(a),"暂未识别")+
+            "\n当前轨道标称峰值："+(rates==null?"未知":rate(rates.peak))+
+            "；平均："+(rates==null?"未知":rate(rates.average));
+    }
     private static String info(Activity a, QualitySelector.Available variants) {
         String current=PlayerTracker.currentResolution(a);
-        StringBuilder text=new StringBuilder("当前播放：").append(current==null?"暂未识别":current);
+        StringBuilder text=new StringBuilder(playing(a));
         if(variants==null)return text.append("\n源画质：正在读取…").toString();
-        if(variants.resolutions.isEmpty())return text.append("\n源画质：列表未提供分辨率，无法判断最高画质").toString();
-        text.append("\n源可用分辨率：").append(android.text.TextUtils.join("、",variants.resolutions));
-        text.append("\n列表中最高：").append(variants.resolutions.get(0));
-        if(variants.incomplete)text.append("（部分档位未标明分辨率，不能确定是否为最高）");
-        else if(current!=null)text.append(current.equals(variants.resolutions.get(0))?"\n当前分辨率已达到列表最高":"\n当前分辨率与列表最高不一致");
-        text.append("\n原画优先是播放策略，实际画质可能随网络和设备变化；分辨率相同不代表码率相同。");
+        if(variants.resolutions.isEmpty())text.append("\n源列表未提供分辨率，无法判断最高分辨率");
+        else {
+            text.append("\n源可用分辨率：").append(android.text.TextUtils.join("、",variants.resolutions));
+            text.append("\n列表中最高分辨率：").append(variants.resolutions.get(0));
+            if(variants.incomplete)text.append("（部分档位未标明，无法确定最高）");
+            else if(current!=null)text.append(current.equals(variants.resolutions.get(0))?"\n当前分辨率已达到列表最高":"\n当前分辨率与列表最高不一致");
+        }
+        text.append("\n源列表最高标称峰值：").append(rate(variants.maxPeak));
+        if(variants.incompletePeak)text.append("（部分档位未标明，无法确定最高）");
+        if(variants.maxAverage>0)text.append("；已标明的最高平均：").append(rate(variants.maxAverage));
+        PlayerTracker.Bitrates currentRate=PlayerTracker.currentBitrates(a);
+        if(currentRate!=null && currentRate.peak>0 && variants.maxPeak>0 && !variants.incompletePeak)
+            text.append(currentRate.peak==variants.maxPeak?"\n当前标称峰值与列表最高一致":"\n当前标称峰值与列表最高不一致");
+        text.append("\n最高码率锁定受设备支持和播放器限制；标称码率不是实时网速。");
         return text.toString();
     }
     static void showDialog(Activity a){
@@ -99,7 +114,7 @@ final class PlaybackQuality {
             }).setNegativeButton("关闭",null).create();
         dialog.show();
         if(source==null || !android.net.Uri.parse(source).getPath().endsWith(".m3u8")) {
-            detail.setText("当前播放："+Objects.toString(PlayerTracker.currentResolution(a),"暂未识别")+"\n未取得源画质列表，无法判断最高画质。请播放几秒后重试。");
+            detail.setText(playing(a)+"\n未取得源画质列表，无法判断最高画质。请播放几秒后重试。");
             return;
         }
         Thread worker=new Thread(()->{
@@ -110,7 +125,7 @@ final class PlaybackQuality {
                 if(!dialog.isShowing() || a.isFinishing())return;
                 PlayerTracker.Current now=PlayerTracker.current(a);
                 if(now==null || !now.id.equals(current.id)){detail.setText("视频已切换，请重新打开画质设置。");return;}
-                if(loaded==null)detail.setText("当前播放："+Objects.toString(PlayerTracker.currentResolution(a),"暂未识别")+"\n源画质列表读取失败，无法判断最高画质。");
+                if(loaded==null)detail.setText(playing(a)+"\n源画质列表读取失败，无法判断最高画质。");
                 else detail.setText(info(a,loaded));
             });
         },"xvideosave-quality-info");worker.setDaemon(true);worker.start();
