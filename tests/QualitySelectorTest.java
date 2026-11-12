@@ -21,6 +21,16 @@ public final class QualitySelectorTest {
         check(QualitySelector.select(unknown,QualitySelector.Quality.ORIGINAL).video.equals("b.m3u8"),"unknown dimensions choose bandwidth");
         boolean rejected=false;try{QualitySelector.select(unknown,QualitySelector.Quality.HD);}catch(java.io.IOException expected){rejected=true;}
         check(rejected,"unknown dimensions reject capped quality");
+        QualitySelector.Available listed=QualitySelector.available(source);
+        check(!listed.incomplete && listed.resolutions.get(0).equals("720×1280"),"listed highest resolution");
+        check(listed.resolutions.contains("480×852"),"listed lower resolution");
+        check(QualitySelector.available(unknown).incomplete,"unknown dimensions are reported");
+        QualitySelector.Available mixed=QualitySelector.available(highOnly+"#EXT-X-STREAM-INF:BANDWIDTH=300\nunknown.m3u8\n");
+        check(mixed.incomplete && mixed.resolutions.size()==1,"known and unknown variants cannot prove highest");
+        boolean incomplete=false;try{QualitySelector.available(highOnly+"#EXT-X-STREAM-INF:BANDWIDTH=500");}catch(java.io.IOException expected){incomplete=true;}
+        check(incomplete,"incomplete variant is rejected");
+        boolean noMaster=false;try{QualitySelector.available("#EXTM3U\n#EXTINF:5,\nsegment.m4s");}catch(java.io.IOException expected){noMaster=true;}
+        check(noMaster,"media playlist is not a master");
         System.out.println("QualitySelector tests passed");
     }
 }

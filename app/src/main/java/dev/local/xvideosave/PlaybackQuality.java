@@ -69,14 +69,50 @@ final class PlaybackQuality {
             XposedBridge.log("XVideoSave: playback quality applied mode="+mode);
         }catch(Throwable e){XposedBridge.log("XVideoSave: playback quality apply failed: "+e.getClass().getSimpleName());}
     }
+    private static String info(Activity a, QualitySelector.Available variants) {
+        String current=PlayerTracker.currentResolution(a);
+        StringBuilder text=new StringBuilder("当前播放：").append(current==null?"暂未识别":current);
+        if(variants==null)return text.append("\n源画质：正在读取…").toString();
+        if(variants.resolutions.isEmpty())return text.append("\n源画质：列表未提供分辨率，无法判断最高画质").toString();
+        text.append("\n源可用分辨率：").append(android.text.TextUtils.join("、",variants.resolutions));
+        text.append("\n列表中最高：").append(variants.resolutions.get(0));
+        if(variants.incomplete)text.append("（部分档位未标明分辨率，不能确定是否为最高）");
+        else if(current!=null)text.append(current.equals(variants.resolutions.get(0))?"\n当前分辨率已达到列表最高":"\n当前分辨率与列表最高不一致");
+        text.append("\n原画优先是播放策略，实际画质可能随网络和设备变化；分辨率相同不代表码率相同。");
+        return text.toString();
+    }
     static void showDialog(Activity a){
         if(!available){Toast.makeText(a,"当前 X 版本暂不支持播放画质设置",Toast.LENGTH_LONG).show();return;}
-        String resolution=PlayerTracker.currentResolution(a);
-        new AlertDialog.Builder(a).setTitle(resolution==null?"播放画质":"播放画质（当前 "+resolution+"）")
-            .setSingleChoiceItems(LABELS,mode,(dialog,index)->{
+        PlayerTracker.Current current=PlayerTracker.current(a);
+        String source=Module.currentSource(a,current);
+        android.widget.LinearLayout header=new android.widget.LinearLayout(a);
+        header.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad=(int)(20*a.getResources().getDisplayMetrics().density);
+        header.setPadding(pad,pad,pad,pad/2);
+        android.widget.TextView title=new android.widget.TextView(a);title.setText("播放画质");title.setTextSize(20);header.addView(title);
+        android.widget.TextView detail=new android.widget.TextView(a);detail.setText(info(a,null));detail.setTextSize(14);header.addView(detail);
+        AlertDialog dialog=new AlertDialog.Builder(a).setCustomTitle(header)
+            .setSingleChoiceItems(LABELS,mode,(d,index)->{
                 mode=index;if(preferences!=null)preferences.edit().putInt("mode",index).apply();
                 for(Object p:PlayerTracker.snapshot())applyLater(p);
-                dialog.dismiss();Toast.makeText(a,"播放画质："+LABELS[index]+"，网络较慢可能缓冲",Toast.LENGTH_LONG).show();
-            }).setNegativeButton("取消",null).show();
+                d.dismiss();Toast.makeText(a,"播放画质："+LABELS[index]+"，播放片刻后可重新打开查看实际分辨率",Toast.LENGTH_LONG).show();
+            }).setNegativeButton("关闭",null).create();
+        dialog.show();
+        if(source==null || !android.net.Uri.parse(source).getPath().endsWith(".m3u8")) {
+            detail.setText("当前播放："+Objects.toString(PlayerTracker.currentResolution(a),"暂未识别")+"\n未取得源画质列表，无法判断最高画质。请播放几秒后重试。");
+            return;
+        }
+        Thread worker=new Thread(()->{
+            QualitySelector.Available result=null;
+            try {result=QualitySelector.available(Downloader.text(source));}catch(Exception ignored){}
+            final QualitySelector.Available loaded=result;
+            a.runOnUiThread(()->{
+                if(!dialog.isShowing() || a.isFinishing())return;
+                PlayerTracker.Current now=PlayerTracker.current(a);
+                if(now==null || !now.id.equals(current.id)){detail.setText("视频已切换，请重新打开画质设置。");return;}
+                if(loaded==null)detail.setText("当前播放："+Objects.toString(PlayerTracker.currentResolution(a),"暂未识别")+"\n源画质列表读取失败，无法判断最高画质。");
+                else detail.setText(info(a,loaded));
+            });
+        },"xvideosave-quality-info");worker.setDaemon(true);worker.start();
     }
 }

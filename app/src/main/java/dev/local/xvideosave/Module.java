@@ -108,6 +108,11 @@ public final class Module implements IXposedHookLoadPackage {
             else if(index==3)PlaybackQuality.showDialog(a);
         }).setNegativeButton("取消",null).show();
     }
+    static String currentSource(Activity a, PlayerTracker.Current current){
+        if(current==null)return null;
+        record(current.uri);
+        synchronized(SEEN){Seen selected=SEEN.get(current.id);return selected==null?null:selected.url;}
+    }
     private static void choose(Activity a,QualitySelector.Quality quality){
         PlayerTracker.Current current=PlayerTracker.current(a);
         if(current==null){Toast.makeText(a,"无法确定当前视频，请播放几秒后重试",Toast.LENGTH_LONG).show();return;}
