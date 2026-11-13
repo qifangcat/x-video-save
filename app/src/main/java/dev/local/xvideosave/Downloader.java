@@ -49,20 +49,22 @@ final class Downloader {
       message(ctx,"已添加视频 "+task.shortId()+" 的下载");
       WORK.execute(()->{
         RUNNING.set(task); status("准备中");
-        File dir=new File(ctx.getCacheDir(),"xvideosave-"+UUID.randomUUID()); dir.mkdirs(); Uri output=null;
+        File dir=null; Uri output=null; boolean success=false;
         try {
+            dir=new File(ctx.getCacheDir(),"xvideosave-"+ResumableTransfer.hash(id+"/"+quality.name())); if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("无法创建下载缓存");
             boolean direct=safe(url).getPath().endsWith(".mp4"); File v; File a=null;
-            if(direct){if(quality!=QualitySelector.Quality.ORIGINAL)throw new IOException("该视频只提供一个版本，请轻点按钮下载");status("下载中");v=new File(dir,"video.mp4");try(OutputStream o=new BufferedOutputStream(new FileOutputStream(v))){copyDirect(url,o);}verifyDirect(v);}
+            if(direct){if(quality!=QualitySelector.Quality.ORIGINAL)throw new IOException("该视频只提供一个版本，请轻点按钮下载");status("下载中");v=new File(dir,"video.mp4");long[] last={0};ResumableTransfer.get(url,v,1_073_741_824L,Downloader::connection,(received,total)->{long now=System.currentTimeMillis();if(now-last[0]>500){status(total>0?"下载 "+(received*100/total)+"%":"下载 "+(received/1048576)+"M");last[0]=now;}});verifyDirect(v);}
             else {Master master=master(url,quality);if(master.resolution!=null)message(ctx,(master.aboveLimit?"没有对应档位，使用最低可用画质：":"下载画质：")+master.resolution);v=track(master.video,new File(dir,"video.bin"),"画面");a=master.audio==null?null:track(master.audio,new File(dir,"audio.bin"),"声音");}
             ContentValues cv=new ContentValues(); cv.put(MediaStore.Video.Media.DISPLAY_NAME,"X_"+id+"_"+System.currentTimeMillis()+".mp4"); cv.put(MediaStore.Video.Media.MIME_TYPE,"video/mp4"); cv.put(MediaStore.Video.Media.RELATIVE_PATH,Environment.DIRECTORY_MOVIES+"/X视频保存"); cv.put(MediaStore.Video.Media.IS_PENDING,1);
             ContentResolver cr=ctx.getContentResolver(); output=cr.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,cv); if(output==null)throw new IOException("无法创建媒体文件");
             if(direct){try(InputStream in=new FileInputStream(v);OutputStream out=cr.openOutputStream(output,"w")){if(out==null)throw new IOException("无法打开媒体文件");byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}}
             else try(ParcelFileDescriptor fd=cr.openFileDescriptor(output,"w")){if(fd==null)throw new IOException("无法打开媒体文件");status("合并中");if(android.os.Build.VERSION.SDK_INT<=33)muxCompatible(v,a,fd);else mux(v,a,fd);}
             cv.clear();cv.put(MediaStore.Video.Media.IS_PENDING,0);if(cr.update(output,cv,null,null)!=1)throw new IOException("无法发布文件");output=null;
-            message(ctx,"视频 "+task.shortId()+" 已保存到相册");
-        }catch(Throwable e){if(output!=null)ctx.getContentResolver().delete(output,null,null);String reason=e.getMessage();if(reason==null)reason=e.getClass().getSimpleName(); final String msg=reason.length()>100?reason.substring(0,100):reason;message(ctx,"视频 "+task.shortId()+" 保存失败："+msg);logFailure(e);}
-        finally {try{File[] fs=dir.listFiles();if(fs!=null)for(File f:fs)f.delete();dir.delete();}finally{RUNNING.remove();synchronized(LOCK){TASKS.remove(task.id);refreshLocked();}}}
+            success=true;message(ctx,"视频 "+task.shortId()+" 已保存到相册");
+        }catch(Throwable e){if(output!=null)ctx.getContentResolver().delete(output,null,null);String reason=e.getMessage();if(reason==null)reason=e.getClass().getSimpleName(); final String msg=reason.length()>100?reason.substring(0,100):reason;message(ctx,"视频 "+task.shortId()+" 下载未完成，请重新点击继续："+msg);logFailure(e);}
+        finally {try{if(success && dir!=null)deleteCache(dir);}finally{RUNNING.remove();synchronized(LOCK){TASKS.remove(task.id);refreshLocked();}}}
     }); }
+    private static void deleteCache(File dir){File[] files=dir.listFiles();if(files!=null)for(File file:files){if(file.isDirectory())deleteCache(file);else file.delete();}dir.delete();}
     private static void message(Context c,String s){MAIN.post(()->Toast.makeText(c,s,Toast.LENGTH_LONG).show());}
     private static void logFailure(Throwable error){
         for(int depth=0;error!=null&&depth<5;depth++,error=error.getCause()){
@@ -75,7 +77,8 @@ final class Downloader {
     private static Map<String,String> attrs(String s){Map<String,String> out=new HashMap<>();Matcher m=ATTR.matcher(s);while(m.find())out.put(m.group(1),m.group(2)!=null?m.group(2):m.group(3));return out;}
     private static URL safe(String s)throws IOException {URL u=new URL(s);if(!"https".equalsIgnoreCase(u.getProtocol()) || !"video.twimg.com".equalsIgnoreCase(u.getHost()) || (u.getPort()!=-1 && u.getPort()!=443) || u.getUserInfo()!=null)throw new IOException("不支持的媒体地址");return u;}
     private static String resolve(String base,String relative)throws IOException {return safe(new URL(safe(base),relative).toString()).toString();}
-    private static HttpURLConnection open(String u)throws IOException {HttpURLConnection c=(HttpURLConnection)safe(u).openConnection();c.setConnectTimeout(15000);c.setReadTimeout(30000);c.setInstanceFollowRedirects(false);c.setRequestProperty("User-Agent","Mozilla/5.0");int status=c.getResponseCode();if(status!=200){c.disconnect();throw new IOException("媒体服务器返回 "+status);}return c;}
+    private static HttpURLConnection connection(String u)throws IOException {HttpURLConnection c=(HttpURLConnection)safe(u).openConnection();c.setConnectTimeout(15000);c.setReadTimeout(30000);c.setInstanceFollowRedirects(false);c.setRequestProperty("User-Agent","Mozilla/5.0");return c;}
+    private static HttpURLConnection open(String u)throws IOException {HttpURLConnection c=connection(u);int status=c.getResponseCode();if(status!=200){c.disconnect();throw new IOException("媒体服务器返回 "+status);}return c;}
     static String text(String u)throws IOException {HttpURLConnection c=open(u);try(InputStream in=c.getInputStream();ByteArrayOutputStream b=new ByteArrayOutputStream()){byte[] x=new byte[8192];int n,total=0;while((n=in.read(x))!=-1){total+=n;if(total>2_000_000)throw new IOException("播放列表过大");b.write(x,0,n);}return b.toString("UTF-8");}finally{c.disconnect();}}
     private static class Master{String video,audio,resolution;boolean aboveLimit;}
     private static Master master(String url)throws IOException {
@@ -90,16 +93,17 @@ final class Downloader {
     private static File track(String playlist,File file,String label)throws IOException {
         String text=text(playlist);String[] lines=text.split("\\r?\\n"); if(!text.contains("#EXT-X-ENDLIST"))throw new IOException("不支持直播或未完成的视频");
         boolean init=false;int segments=0;long total=0;int count=0;for(String raw:lines){String line=raw.trim();if(!line.isEmpty()&&!line.startsWith("#"))count++;}
+        File parts=new File(file.getParentFile(),"parts");if(!parts.isDirectory()&&!parts.mkdirs())throw new IOException("无法创建分片缓存");
         try(OutputStream out=new BufferedOutputStream(new FileOutputStream(file))){
             for(String raw:lines){String line=raw.trim();if(line.startsWith("#EXT-X-KEY:") && !line.contains("METHOD=NONE"))throw new IOException("不支持加密视频");
                 if(line.startsWith("#EXT-X-BYTERANGE") || line.startsWith("#EXT-X-DISCONTINUITY"))throw new IOException("暂不支持该分片格式");
-                if(line.startsWith("#EXT-X-MAP:")){if(init)throw new IOException("暂不支持多个初始化分片");Map<String,String>a=attrs(line.substring(11));String u=a.get("URI");if(u==null||a.containsKey("BYTERANGE"))throw new IOException("不支持的初始化分片");total+=copy(resolve(playlist,u),out);init=true;}
-                else if(!line.isEmpty()&&!line.startsWith("#")){if(++segments>10000)throw new IOException("分片过多");status(label+" "+segments+"/"+count);total+=copy(resolve(playlist,line),out);if(total>1_073_741_824L)throw new IOException("视频过大");}
+                String part=null;
+                if(line.startsWith("#EXT-X-MAP:")){if(init)throw new IOException("暂不支持多个初始化分片");Map<String,String>a=attrs(line.substring(11));String u=a.get("URI");if(u==null||a.containsKey("BYTERANGE"))throw new IOException("不支持的初始化分片");part=resolve(playlist,u);init=true;}
+                else if(!line.isEmpty()&&!line.startsWith("#")){if(++segments>10000)throw new IOException("分片过多");status(label+" "+segments+"/"+count);part=resolve(playlist,line);}
+                if(part!=null){File cached=new File(parts,ResumableTransfer.hash(part));ResumableTransfer.get(part,cached,256L*1024*1024,Downloader::connection,(received,length)->{});total+=cached.length();if(total>1_073_741_824L)throw new IOException("视频过大");try(InputStream in=new BufferedInputStream(new FileInputStream(cached))){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}}
             }
         } if(!init || segments==0)throw new IOException("视频分片不完整");return file;
     }
-    private static long copy(String url,OutputStream out)throws IOException {HttpURLConnection c=open(url);long total=0;try(InputStream in=c.getInputStream()){byte[] buf=new byte[64*1024];int n;while((n=in.read(buf))!=-1){total+=n;if(total>256L*1024*1024)throw new IOException("单个分片过大");out.write(buf,0,n);}return total;}finally{c.disconnect();}}
-    private static long copyDirect(String url,OutputStream out)throws IOException {HttpURLConnection c=open(url);long total=0,last=0;long length=c.getContentLengthLong();try(InputStream in=c.getInputStream()){byte[] buf=new byte[64*1024];int n;while((n=in.read(buf))!=-1){total+=n;if(total>1_073_741_824L)throw new IOException("视频过大");out.write(buf,0,n);long now=System.currentTimeMillis();if(now-last>500){status(length>0?"下载 "+(total*100/length)+"%":"下载 "+(total/1048576)+"M");last=now;}}return total;}finally{c.disconnect();}}
     private static void verifyDirect(File file)throws IOException {MediaExtractor ex=new MediaExtractor();try{ex.setDataSource(file.getAbsolutePath());boolean ok=false;for(int i=0;i<ex.getTrackCount();i++){MediaFormat f=ex.getTrackFormat(i);String mime=f.getString(MediaFormat.KEY_MIME);if(mime!=null&&mime.startsWith("video/")){ex.selectTrack(i);ok=ex.readSampleData(ByteBuffer.allocateDirect(16*1024*1024),0)>0;break;}}if(!ok)throw new IOException("视频文件没有可播放画面");}finally{ex.release();}}
     private static void muxCompatible(File video,File audio,ParcelFileDescriptor fd)throws IOException {
         ParsedMovie vm=null,am=null;

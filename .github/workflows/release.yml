@@ -36,6 +36,12 @@ jobs:
           mkdir -p build/test-classes
           javac -encoding UTF-8 -d build/test-classes app/src/main/java/dev/local/xvideosave/QualitySelector.java tests/QualitySelectorTest.java
           java -cp build/test-classes dev.local.xvideosave.QualitySelectorTest tests/quality-fixture.m3u8
+      - name: Run resumable download tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac -encoding UTF-8 -d build/test-classes app/src/main/java/dev/local/xvideosave/ResumableTransfer.java tests/ResumableTransferTest.java
+          java -cp build/test-classes dev.local.xvideosave.ResumableTransferTest
       - name: Restore signing key
         shell: bash
         env:
