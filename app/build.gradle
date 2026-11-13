@@ -1,6 +1,6 @@
 plugins { id 'com.android.application' }
 android { namespace 'dev.local.xvideosave'; compileSdk 36
- defaultConfig { applicationId 'dev.local.xvideosave'; minSdk 29; targetSdk 35; versionCode 3; versionName '0.3' }
+ defaultConfig { applicationId 'dev.local.xvideosave'; minSdk 29; targetSdk 35; versionCode 4; versionName '0.4' }
  signingConfigs { debug {
   def keyPath = System.getenv("XVIDEOSAVE_SIGNING_KEYSTORE")
   if (keyPath) storeFile file(keyPath)
