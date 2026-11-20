@@ -34,17 +34,15 @@ final class NativePlaybackControl {
                 return "XVideoSaveLongClick";
             });
             Method resolved=null;
-            for(String name:new String[]{"com.x.ui.immersive.chrome.a","com.x.ui.immersive.chrome.b"}){
-                try {Class<?> owner=Class.forName(name,false,loader);Method m=owner.getDeclaredMethod("f",int.class,long.class,composer,modifier,String.class,callback,callback);if(Modifier.isStatic(m.getModifiers())&&m.getReturnType()==void.class){resolved=m;break;}}catch(ClassNotFoundException|NoSuchMethodException ignored){}
+            for(String name:new String[]{"a","b","c"}){
+                try {Class<?> owner=Class.forName("com.x.ui.immersive.chrome."+name,false,loader);Method m=owner.getDeclaredMethod("f",int.class,long.class,composer,modifier,String.class,callback,callback);if(Modifier.isStatic(m.getModifiers())&&m.getReturnType()==void.class){resolved=m;break;}}catch(ClassNotFoundException|NoSuchMethodException ignored){}
             }
             if(resolved==null)throw new NoSuchMethodException("speed control");
             final Method speed=resolved;
             speed.setAccessible(true);
             Class<?> runtime=Class.forName("androidx.compose.runtime.o0",false,loader);
-            Method begin=runtime.getMethod("k0",int.class),end=runtime.getMethod("u",boolean.class);
-            Class<?> stateClass=Class.forName("androidx.compose.runtime.t1",false,loader);
-            progressState=stateClass.getConstructor(int.class).newInstance(0);
-            progressRead=stateClass.getMethod("getValue");progressWrite=stateClass.getMethod("k",int.class);
+            final Method begin=initializeProgress(loader,runtime);
+            Method end=runtime.getMethod("u",boolean.class);
             XposedBridge.hookMethod(speed,new XC_MethodHook(){protected void afterHookedMethod(MethodHookParam p){
                 if(Boolean.TRUE.equals(INSIDE.get()) || p.args.length!=7 || !(p.args[4] instanceof String)
                         || !SPEED.matcher(((String)p.args[4]).trim()).matches() || !runtime.isInstance(p.args[2]))return;
@@ -58,6 +56,23 @@ final class NativePlaybackControl {
             }});
             XposedBridge.log("XVideoSave: native speed-row hook installed");
         }catch(Throwable e){XposedBridge.log("XVideoSave: native speed-row hook unavailable: "+e.getClass().getSimpleName());}
+    }
+    private static Method initializeProgress(ClassLoader loader,Class<?> runtime) throws ReflectiveOperationException{
+        try {
+            return initializeProgress(loader,runtime,"k0","t1");
+        }catch(ClassNotFoundException|NoSuchMethodException legacyUnavailable){
+            return initializeProgress(loader,runtime,"l0","u1");
+        }
+    }
+    private static Method initializeProgress(ClassLoader loader,Class<?> runtime,String beginName,String stateName)
+            throws ReflectiveOperationException{
+        Method begin=runtime.getMethod(beginName,int.class);
+        Class<?> stateClass=Class.forName("androidx.compose.runtime."+stateName,false,loader);
+        Method read=stateClass.getMethod("getValue"),write=stateClass.getMethod("k",int.class);
+        progressState=stateClass.getConstructor(int.class).newInstance(0);
+        progressRead=read;
+        progressWrite=write;
+        return begin;
     }
     static void statusChanged(){
         if(progressState==null||progressWrite==null)return;
