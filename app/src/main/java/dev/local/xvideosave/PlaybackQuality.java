@@ -20,16 +20,14 @@ final class PlaybackQuality {
     private static volatile boolean available;
     private static SharedPreferences preferences;
     private static Class<?> parameterClass, builderClass;
-    private static Method setter, getter, applicationLooper;
+    private static Method setter, getter;
+    private static Field applicationLooper;
 
     static void install(ClassLoader loader) {
         try {
             Class<?> player=Class.forName("androidx.media3.exoplayer.j0",false,loader);
-            try {
-                resolveParameters(player,"S","B0","b1");
-            }catch(NoSuchMethodException|NoSuchFieldException legacyUnavailable){
-                resolveParameters(player,"T","C0","i1");
-            }
+            resolveParameters(player);
+            applicationLooper=PlayerTracker.uniquePlayerField(player,Looper.class);
             XposedBridge.hookMethod(setter,new XC_MethodHook(){protected void beforeHookedMethod(MethodHookParam p){
                 if(Boolean.TRUE.equals(internal.get()) || p.args[0]==null)return;
                 try {baseline.put(p.thisObject,p.args[0]);if(mode!=0)p.args[0]=modify(p.args[0],mode);}
@@ -38,23 +36,36 @@ final class PlaybackQuality {
             available=true;
         }catch(Throwable e){available=false;XposedBridge.log("XVideoSave: playback quality unavailable: "+e.getClass().getSimpleName());}
     }
-    private static void resolveParameters(Class<?> player,String getterName,String setterName,String looperName)
-            throws NoSuchMethodException,NoSuchFieldException {
-        Method read=player.getMethod(getterName);
-        Class<?> parameters=read.getReturnType();
-        Class<?> builder=parameters.getMethod("a").getReturnType();
+    private static void resolveParameters(Class<?> player) throws NoSuchMethodException {
+        Method[] methods=player.getMethods();
+        for(Method read:methods){
+            if(!PlayerTracker.isMediaValueGetter(read))continue;
+            Class<?> parameters=read.getReturnType();
+            Class<?> builder;
+            try {
+                builder=parameters.getMethod("a").getReturnType();
+                if(builder.getMethod("b").getReturnType()!=parameters || !hasBuilderFields(builder))continue;
+            }catch(NoSuchMethodException|NoSuchFieldException otherValue){
+                continue;
+            }
+            for(Method write:methods){
+                if(Modifier.isStatic(write.getModifiers()) || write.getReturnType()!=void.class
+                        || write.getParameterCount()!=1 || write.getParameterTypes()[0]!=parameters)continue;
+                if(setter!=null)throw new NoSuchMethodException("ambiguous track selection parameters");
+                getter=read;
+                setter=write;
+                parameterClass=parameters;
+                builderClass=builder;
+            }
+        }
+        if(setter==null)throw new NoSuchMethodException("track selection parameters");
+    }
+    private static boolean hasBuilderFields(Class<?> builder) throws NoSuchFieldException {
         for(String field:new String[]{"a","b","c","d","e","f","i","j"})
-            if(builder.getDeclaredField(field).getType()!=int.class)throw new NoSuchFieldException(field);
+            if(builder.getDeclaredField(field).getType()!=int.class)return false;
         for(String field:new String[]{"k","F","G"})
-            if(builder.getDeclaredField(field).getType()!=boolean.class)throw new NoSuchFieldException(field);
-        Method write=player.getMethod(setterName,parameters),looper=player.getMethod(looperName);
-        if(write.getReturnType()!=void.class || looper.getReturnType()!=Looper.class
-                || builder.getMethod("b").getReturnType()!=parameters)throw new NoSuchMethodException();
-        getter=read;
-        setter=write;
-        applicationLooper=looper;
-        parameterClass=parameters;
-        builderClass=builder;
+            if(builder.getDeclaredField(field).getType()!=boolean.class)return false;
+        return true;
     }
     static void initialize(Context context){preferences=context.getSharedPreferences("xvideosave_playback",Context.MODE_PRIVATE);int saved=preferences.getInt("mode",0);mode=saved>=0&&saved<LABELS.length?saved:0;}
     private static void intField(Object b,String field,int value)throws Exception{Field f=builderClass.getDeclaredField(field);f.setAccessible(true);f.setInt(b,value);}
@@ -71,7 +82,7 @@ final class PlaybackQuality {
     }
     static void playerCreated(Object player){if(available&&mode!=0)applyLater(player);}
     private static void applyLater(Object player){
-        try {Looper looper=(Looper)applicationLooper.invoke(player);if(looper==null)return;
+        try {Looper looper=(Looper)applicationLooper.get(player);if(looper==null)return;
             new Handler(looper).post(()->apply(player));
         }catch(Throwable e){XposedBridge.log("XVideoSave: playback scheduling unavailable: "+e.getClass().getSimpleName());}
     }

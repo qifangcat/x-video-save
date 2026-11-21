@@ -1,6 +1,7 @@
 package dev.local.xvideosave;
 
 import java.lang.reflect.*;
+import java.util.Arrays;
 import java.util.regex.Pattern;
 import de.robv.android.xposed.*;
 
@@ -33,12 +34,7 @@ final class NativePlaybackControl {
                 if(method.getName().equals("equals"))return proxy==args[0];
                 return "XVideoSaveLongClick";
             });
-            Method resolved=null;
-            for(String name:new String[]{"a","b","c"}){
-                try {Class<?> owner=Class.forName("com.x.ui.immersive.chrome."+name,false,loader);Method m=owner.getDeclaredMethod("f",int.class,long.class,composer,modifier,String.class,callback,callback);if(Modifier.isStatic(m.getModifiers())&&m.getReturnType()==void.class){resolved=m;break;}}catch(ClassNotFoundException|NoSuchMethodException ignored){}
-            }
-            if(resolved==null)throw new NoSuchMethodException("speed control");
-            final Method speed=resolved;
+            Method speed=findSpeedControl(loader,int.class,long.class,composer,modifier,String.class,callback,callback);
             speed.setAccessible(true);
             Class<?> runtime=Class.forName("androidx.compose.runtime.o0",false,loader);
             final Method begin=initializeProgress(loader,runtime);
@@ -56,6 +52,25 @@ final class NativePlaybackControl {
             }});
             XposedBridge.log("XVideoSave: native speed-row hook installed");
         }catch(Throwable e){XposedBridge.log("XVideoSave: native speed-row hook unavailable: "+e.getClass().getSimpleName());}
+    }
+    private static Method findSpeedControl(ClassLoader loader,Class<?>... parameters) throws NoSuchMethodException{
+        Method result=null;
+        for(char name='a';name<='z';name++){
+            Method[] methods;
+            try {
+                methods=Class.forName("com.x.ui.immersive.chrome."+name,false,loader).getDeclaredMethods();
+            }catch(ClassNotFoundException|LinkageError unusedClass){
+                continue;
+            }
+            for(Method method:methods){
+                if(!Modifier.isStatic(method.getModifiers()) || method.getReturnType()!=void.class
+                        || !Arrays.equals(method.getParameterTypes(),parameters))continue;
+                if(result!=null)throw new NoSuchMethodException("ambiguous speed control");
+                result=method;
+            }
+        }
+        if(result==null)throw new NoSuchMethodException("speed control");
+        return result;
     }
     private static Method initializeProgress(ClassLoader loader,Class<?> runtime) throws ReflectiveOperationException{
         try {

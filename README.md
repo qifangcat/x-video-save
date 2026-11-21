@@ -19,7 +19,7 @@
 
 需要 Android 设备、X 官方客户端和可用的 LSPosed 环境。从 [Releases 发布页](https://github.com/qifangcat/x-video-save/releases)下载 APK，也可自行编译。安装后在 LSPosed 中启用模块并将作用域设为 X，重启 X 后进入视频播放页面，播放几秒即可使用下载入口。
 
-适配目标：手机 Android 16、LSPosed 2.1.0、X 12.41.0-prod.01 或 12.44.0-prod.01，以及平板 Android 13、LSPosed 1.9.2、X 12.42.0-prod.01。模块会检查已知的播放器和播放栏接口；X 后续更新仍可能需要重新适配。其他组合的兼容性未全面验证。
+适配目标：手机 Android 16、LSPosed 2.1.0，X 12.41.0-prod.01、12.44.0-prod.01 或 12.45.1-prod.01，以及平板 Android 13、LSPosed 1.9.2、X 12.42.0-prod.01。模块按签名查找播放器和播放栏接口，以适应内部方法改名；接口结构变化时仍可能需要重新适配。其他组合的兼容性未全面验证。
 
 ## 已知限制
 
