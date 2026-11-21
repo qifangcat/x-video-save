@@ -114,7 +114,7 @@ public final class Module implements IXposedHookLoadPackage {
         synchronized(SEEN){Seen selected=SEEN.get(current.id);return selected==null?null:selected.url;}
     }
     private static void choose(Activity a,QualitySelector.Quality quality){
-        PlayerTracker.Current current=PlayerTracker.current(a);
+        PlayerTracker.Current current=PlayerTracker.current(a,true);
         if(current==null){Toast.makeText(a,"无法确定当前视频，请播放几秒后重试",Toast.LENGTH_LONG).show();return;}
         record(current.uri); Seen selected;
         synchronized(SEEN){selected=SEEN.get(current.id);}
